@@ -18,6 +18,8 @@ New Features:
 ^^^^^^^^^^^^^
 - Add `n_cpu_tf_sess` to model constructor to choose the number of threads used by Tensorflow
 - `VecNormalize` now supports being pickled and unpickled.
+- Add type checking and PEP 561 compliance.
+  Note: most functions are still not annotated, this will be a gradual process.
 
 Bug Fixes:
 ^^^^^^^^^^
