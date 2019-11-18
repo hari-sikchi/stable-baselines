@@ -124,6 +124,7 @@ setup(name='stable_baselines',
             'pytest-cov',
             'pytest-env',
             'pytest-xdist',
+            'pytype',
         ],
         'docs': [
             'sphinx',
