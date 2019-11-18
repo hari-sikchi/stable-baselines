@@ -24,6 +24,7 @@ RUN \
     pip install pytest-cov && \
     pip install pytest-env && \
     pip install pytest-xdist && \
+    pip install pytype && \
     pip install matplotlib && \
     pip install gym[atari,classic_control]>=0.10.9
 
