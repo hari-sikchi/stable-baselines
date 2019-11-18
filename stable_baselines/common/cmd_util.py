@@ -9,7 +9,7 @@ from gym.wrappers import FlattenDictWrapper
 
 from stable_baselines import logger
 from stable_baselines.bench import Monitor
-from stable_baselines.common import set_global_seeds
+from stable_baselines.common.misc_util import set_global_seeds
 from stable_baselines.common.atari_wrappers import make_atari, wrap_deepmind
 from stable_baselines.common.misc_util import mpi_rank_or_zero
 from stable_baselines.common.vec_env import DummyVecEnv, SubprocVecEnv
@@ -62,7 +62,7 @@ def make_mujoco_env(env_id, seed, allow_early_resets=True):
     """
     set_global_seeds(seed + 10000 * mpi_rank_or_zero())
     env = gym.make(env_id)
-    env = Monitor(env, os.path.join(logger.get_dir(), str(rank)), allow_early_resets=allow_early_resets)
+    env = Monitor(env, os.path.join(logger.get_dir(), '0'), allow_early_resets=allow_early_resets)
     env.seed(seed)
     return env
 
