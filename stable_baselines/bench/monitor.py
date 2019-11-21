@@ -53,6 +53,9 @@ class Monitor(Wrapper):
         self.total_steps = 0
         self.current_reset_info = {}  # extra info about the current episode, that was passed in during reset()
 
+    def save(self,path):
+        self.env.save(path)
+
     def reset(self, **kwargs):
         """
         Calls the Gym environment reset. Can only be called if the environment is over, or if allow_early_resets is True

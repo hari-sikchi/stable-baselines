@@ -132,6 +132,7 @@ class SAC(OffPolicyRLModel):
         self.processed_obs_ph = None
         self.processed_next_obs_ph = None
         self.log_ent_coef = None
+        self.action_repetition=1
 
         if _init_setup_model:
             self.setup_model()
@@ -366,10 +367,13 @@ class SAC(OffPolicyRLModel):
         return policy_loss, qf1_loss, qf2_loss, value_loss, entropy
 
     def learn(self, total_timesteps, callback=None,
-              log_interval=4, tb_log_name="SAC", reset_num_timesteps=True, replay_wrapper=None):
+              log_interval=4, tb_log_name="SAC", reset_num_timesteps=True, replay_wrapper=None,use_action_repeat = False):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
-
+        self.use_action_repeat=use_action_repeat
+        self.action_repetition = 6
+        self.running_action_repetition = self.action_repetition
+            #self.env.act_rep-=(21-4)/float(total_timesteps)
         if replay_wrapper is not None:
             self.replay_buffer = replay_wrapper(self.replay_buffer)
 
@@ -393,8 +397,16 @@ class SAC(OffPolicyRLModel):
             ep_info_buf = deque(maxlen=100)
             n_updates = 0
             infos_values = []
+            self.num_timesteps=0
 
             for step in range(total_timesteps):
+                if use_action_repeat:
+                    # self.env.dec_act_rep((21-4)/float(total_timesteps))
+                    self.running_action_repetition -= ((6-1)/float(total_timesteps))
+                    self.action_repetition = int(self.running_action_repetition)
+                    if(self.action_repetition<1):
+                        self.action_repetition=1
+                    
                 if callback is not None:
                     # Only stop training if return value is False, not when it is None. This is for backwards
                     # compatibility with callbacks that have no return statement.
@@ -419,9 +431,21 @@ class SAC(OffPolicyRLModel):
                     rescaled_action = action * np.abs(self.action_space.low)
 
                 assert action.shape == self.env.action_space.shape
-
-                new_obs, reward, done, info = self.env.step(rescaled_action)
-
+                
+                # Add action repetition
+                
+                if self.use_action_repeat: 
+                    repeated_reward = 0
+                    for _ in range(self.action_repetition):
+                        # print("Repeating actions for: {}".format(self.action_repetition))
+                        new_obs, reward, done, info = self.env.step(rescaled_action)
+                        repeated_reward+=reward
+                        if done:
+                            break
+                    reward = repeated_reward
+                else:
+                    new_obs, reward, done, info = self.env.step(rescaled_action)
+                
                 # Store transition in the replay buffer.
                 self.replay_buffer.add(obs, action, reward, new_obs, float(done))
                 obs = new_obs
@@ -531,32 +555,61 @@ class SAC(OffPolicyRLModel):
                 self.target_params)
 
     def save(self, save_path, cloudpickle=False):
-        data = {
-            "learning_rate": self.learning_rate,
-            "buffer_size": self.buffer_size,
-            "learning_starts": self.learning_starts,
-            "train_freq": self.train_freq,
-            "batch_size": self.batch_size,
-            "tau": self.tau,
-            "ent_coef": self.ent_coef if isinstance(self.ent_coef, float) else 'auto',
-            "target_entropy": self.target_entropy,
-            # Should we also store the replay buffer?
-            # this may lead to high memory usage
-            # with all transition inside
-            # "replay_buffer": self.replay_buffer
-            "gamma": self.gamma,
-            "verbose": self.verbose,
-            "observation_space": self.observation_space,
-            "action_space": self.action_space,
-            "policy": self.policy,
-            "n_envs": self.n_envs,
-            "n_cpu_tf_sess": self.n_cpu_tf_sess,
-            "seed": self.seed,
-            "action_noise": self.action_noise,
-            "random_exploration": self.random_exploration,
-            "_vectorize_action": self._vectorize_action,
-            "policy_kwargs": self.policy_kwargs
-        }
+        if self.use_action_repeat:
+            data = {
+                "learning_rate": self.learning_rate,
+                "buffer_size": self.buffer_size,
+                "learning_starts": self.learning_starts,
+                "train_freq": self.train_freq,
+                "batch_size": self.batch_size,
+                "tau": self.tau,
+                "ent_coef": self.ent_coef if isinstance(self.ent_coef, float) else 'auto',
+                "target_entropy": self.target_entropy,
+                # Should we also store the replay buffer?
+                # this may lead to high memory usage
+                # with all transition inside
+                # "replay_buffer": self.replay_buffer
+                "gamma": self.gamma,
+                "verbose": self.verbose,
+                "observation_space": self.observation_space,
+                "action_space": self.action_space,
+                "policy": self.policy,
+                "n_envs": self.n_envs,
+                "n_cpu_tf_sess": self.n_cpu_tf_sess,
+                "seed": self.seed,
+                "action_noise": self.action_noise,
+                "random_exploration": self.random_exploration,
+                "_vectorize_action": self._vectorize_action,
+                "policy_kwargs": self.policy_kwargs,
+                "action_repetition": self.action_repetition
+            }
+        else:
+            data = {
+                "learning_rate": self.learning_rate,
+                "buffer_size": self.buffer_size,
+                "learning_starts": self.learning_starts,
+                "train_freq": self.train_freq,
+                "batch_size": self.batch_size,
+                "tau": self.tau,
+                "ent_coef": self.ent_coef if isinstance(self.ent_coef, float) else 'auto',
+                "target_entropy": self.target_entropy,
+                # Should we also store the replay buffer?
+                # this may lead to high memory usage
+                # with all transition inside
+                # "replay_buffer": self.replay_buffer
+                "gamma": self.gamma,
+                "verbose": self.verbose,
+                "observation_space": self.observation_space,
+                "action_space": self.action_space,
+                "policy": self.policy,
+                "n_envs": self.n_envs,
+                "n_cpu_tf_sess": self.n_cpu_tf_sess,
+                "seed": self.seed,
+                "action_noise": self.action_noise,
+                "random_exploration": self.random_exploration,
+                "_vectorize_action": self._vectorize_action,
+                "policy_kwargs": self.policy_kwargs          
+            }            
 
         params_to_save = self.get_parameters()
 

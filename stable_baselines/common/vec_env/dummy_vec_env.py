@@ -52,6 +52,10 @@ class DummyVecEnv(VecEnv):
             self._save_obs(env_idx, obs)
         return self._obs_from_buf()
 
+    def dec_act_rep(self,decrease_amount):
+        for env in self.envs:
+            env.dec_act_rep(decrease_amount)
+
     def close(self):
         for env in self.envs:
             env.close()
