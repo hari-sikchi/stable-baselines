@@ -371,8 +371,10 @@ class SAC(OffPolicyRLModel):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
         self.use_action_repeat=use_action_repeat
-        self.action_repetition = 6
+        self.action_repetition = 0.8
         self.running_action_repetition = self.action_repetition
+        prev_action = None
+        # self.prob_past = 0.6
             #self.env.act_rep-=(21-4)/float(total_timesteps)
         if replay_wrapper is not None:
             self.replay_buffer = replay_wrapper(self.replay_buffer)
@@ -401,11 +403,17 @@ class SAC(OffPolicyRLModel):
 
             for step in range(total_timesteps):
                 if use_action_repeat:
+                    # self.action_repetition-=((0.9)/float(total_timesteps))
+                    amount = ((5)/float(total_timesteps))
+                    self.action_repetition = (self.action_repetition*amount +self.action_repetition-amount)/(1-amount+amount*self.action_repetition)
+                    if(self.action_repetition<0):
+                        self.action_repetition=0
                     # self.env.dec_act_rep((21-4)/float(total_timesteps))
-                    self.running_action_repetition -= ((6-1)/float(total_timesteps))
-                    self.action_repetition = int(self.running_action_repetition)
-                    if(self.action_repetition<1):
-                        self.action_repetition=1
+                    # self.running_action_repetition -= ((6-1)/float(total_timesteps))
+                
+                    # self.action_repetition = int(self.running_action_repetition)
+                    # if(self.action_repetition<1):
+                    #     self.action_repetition=1
                     
                 if callback is not None:
                     # Only stop training if return value is False, not when it is None. This is for backwards
@@ -430,14 +438,19 @@ class SAC(OffPolicyRLModel):
                     # Rescale from [-1, 1] to the correct bounds
                     rescaled_action = action * np.abs(self.action_space.low)
 
+                if prev_action is not None:
+                    if(np.random.uniform(0,1)<self.action_repetition):
+                        rescaled_action=prev_action
+                
                 assert action.shape == self.env.action_space.shape
                 
                 # Add action repetition
                 
                 if self.use_action_repeat: 
                     repeated_reward = 0
-                    for _ in range(self.action_repetition):
+                    for _ in range(1):
                         # print("Repeating actions for: {}".format(self.action_repetition))
+                        prev_action = rescaled_action
                         new_obs, reward, done, info = self.env.step(rescaled_action)
                         repeated_reward+=reward
                         if done:
@@ -487,6 +500,7 @@ class SAC(OffPolicyRLModel):
 
                 episode_rewards[-1] += reward
                 if done:
+                    prev_action=None
                     if self.action_noise is not None:
                         self.action_noise.reset()
                     if not isinstance(self.env, VecEnv):
