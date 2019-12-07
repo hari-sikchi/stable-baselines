@@ -9,25 +9,23 @@ import gym
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from stable_baselines.common import set_global_seeds
+from gym import error, spaces
 from stable_baselines.bench import Monitor
 from stable_baselines.results_plotter import load_results, ts2xy
 import json
 best_mean_reward, n_steps = -np.inf, 0
 best_eval_mean_reward = -np.inf
-seed = 500 
-log_dir = "logs/mujoco/Hopper_buffer_anneal_"+str(seed)+ "/"
+log_dir = "logs/mujoco/Hopper_poisson_new/"
 os.makedirs(log_dir, exist_ok=True)
-log_data = {'dt':[],'eval':[],'train':[],'timesteps':[]}
+log_data = {'dt':[],'eval':[],'train':[],'timesteps':[],'poisson_mean':[]}
 
 f = open(log_dir+"eval.txt", "w")
-set_global_seeds(seed)
+
 test_env = DummyVecEnv([lambda: gym.make("Hopper-v2")])
 max_eval_timesteps = 5000
 # Automatically normalize the input features
 # test_env = VecNormalize(test_env, norm_obs=True, norm_reward=False,
 #                         clip_obs=10.)
-
 
 
 def callback(_locals, _globals):
@@ -40,7 +38,7 @@ def callback(_locals, _globals):
 
     global n_steps, best_mean_reward, best_eval_mean_reward
     # Print stats every 1000 calls
-
+    
     total_reward=0
     mean_reward=0
     if (n_steps + 1) % 1000== 0:
@@ -49,7 +47,7 @@ def callback(_locals, _globals):
             timesteps = 0
             obs = test_env.reset()
             while not dones:
-                action, _states = model.predict(obs)
+                action, _states = model.predict(np.concatenate((obs,np.array([[1]]).reshape(1,1)),axis=1))
                 if model.use_action_repeat:
                     for _ in range(1):
                         obs, rewards, dones, info = test_env.step(action)
@@ -65,7 +63,7 @@ def callback(_locals, _globals):
                     total_reward+=rewards
                     if(timesteps==max_eval_timesteps):
                         dones=True
-
+                 
                 if(dones):
                     break
         mean_reward=total_reward/100.0
@@ -76,8 +74,9 @@ def callback(_locals, _globals):
             # Example for saving best model
             print("Saving new best model")
             _locals['self'].save(log_dir + 'best_model_eval.pkl')
-        print("dt: {}".format(model.action_repetition))
-        log_data['dt'].append(model.action_repetition)
+
+        log_data['dt'].append(model.poisson_action)
+        log_data['poisson_mean'].append(model.poisson_mean)        
         log_data['eval'].append(mean_reward)
         log_data['timesteps'].append(model.num_timesteps)
 
@@ -97,9 +96,9 @@ def callback(_locals, _globals):
                 print("Saving new best model")
                 _locals['self'].save(log_dir + 'best_model.pkl')
             log_data['train'].append(mean_reward)
-
-
-
+                
+                
+    
     n_steps += 1
     # Returning False will stop training early
     return True
@@ -118,11 +117,18 @@ env = Monitor(env.envs[0], log_dir, allow_early_resets=True)
 
 #env.act_rep = 20
 
-model = SAC(MlpPolicy, env, verbose=1)
-print("Starting Experiment with seed: {}".format(seed))
+# print(env.observation_space)
 
+low = np.full((12,), -float('inf'))
+high = np.full((12,), float('inf'))
+space = spaces.Box(low, high, dtype=low.dtype)
+env.observation_space = space
+print(env.observation_space)
+# exit()
+
+model = SAC(MlpPolicy, env, verbose=1)
 #model = PPO2(MlpPolicy, env,verbose=True)
-model.learn(total_timesteps=1000000,use_action_repeat= True,poisson=False, callback=callback)
+model.learn(total_timesteps=1000000,poisson= True, callback=callback)
 f.close()
 # json = json.dumps(log_data)
 # f = open(log_dir+"log_data.json","w")

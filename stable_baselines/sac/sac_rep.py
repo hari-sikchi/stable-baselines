@@ -26,7 +26,7 @@ def get_vars(scope):
     return tf_util.get_trainable_vars(scope)
 
 
-class SAC(OffPolicyRLModel):
+class SAC_REP(OffPolicyRLModel):
     """
     Soft Actor-Critic (SAC)
     Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor,
@@ -79,7 +79,7 @@ class SAC(OffPolicyRLModel):
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False,
                  seed=None, n_cpu_tf_sess=None):
 
-        super(SAC, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
+        super(SAC_REP, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
                                   policy_base=SACPolicy, requires_vec_env=False, policy_kwargs=policy_kwargs,
                                   seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
 
@@ -378,8 +378,6 @@ class SAC(OffPolicyRLModel):
         self.poisson=poisson
         self.poisson_action = 4
         self.poisson_mean = 4
-        self.replay_buffer2 = ReplayBuffer(self.buffer_size)
-        self.replay_buffer1 = ReplayBuffer(self.buffer_size)
         prev_action = None
         # self.prob_past = 0.6
             #self.env.act_rep-=(21-4)/float(total_timesteps)
@@ -428,14 +426,14 @@ class SAC(OffPolicyRLModel):
                     self.running_action_repetition -= amount
                     # print("Action repetition is :{}".format(self.action_repetition))
                     if(self.running_action_repetition<=2 and self.running_action_repetition>1):
-                        if(self.action_repetition==4):
-                            print("Flushing replay buffer 4, {} prev_size: {} new size: {}".format(self.action_repetition,len(self.replay_buffer),len(self.replay_buffer2)))
-                            self.replay_buffer = self.replay_buffer2
+                        # if(self.action_repetition==4):
+                            # print("Flushing replay buffer 4, {}".format(self.action_repetition))
+                            # self.replay_buffer = ReplayBuffer(self.buffer_size)
                         self.action_repetition=2
                     if(self.running_action_repetition<=1):
-                        if(self.action_repetition==2):
-                            print("Flushing replay buffer 4, {} prev_size: {} new size: {}".format(self.action_repetition,len(self.replay_buffer2),len(self.replay_buffer1)))
-                            self.replay_buffer = self.replay_buffer1
+                        # if(self.action_repetition==2):
+                            # print("Flushing replay buffer 2, {}".format(self.action_repetition))
+                            # self.replay_buffer = ReplayBuffer(self.buffer_size)
                         self.action_repetition=1
                         
                     # self.action_repetition = (self.action_repetition*amount +self.action_repetition-amount)/(1-amount+amount*self.action_repetition)
@@ -481,28 +479,22 @@ class SAC(OffPolicyRLModel):
                 assert action.shape == self.env.action_space.shape
                 
                 # Add action repetition
-                inter_obs = obs.copy()
-                inter_obs2 = obs.copy()
-                inter_reward2 = 0
                 # print("Action repetition is {}".format(self.action_repetition))
                 if self.use_action_repeat: 
                     repeated_reward = 0
-                    for act_rep in range(self.action_repetition):
-                        # print("Repeating actions for: {}".format(self.action_repetition))
+                    # print("Repeating actions for: {}".format(int(rescaled_action[-1])+4))
+
+                    for repeat_step in range(int(rescaled_action[-1])+4):
                         prev_action = rescaled_action
-                        new_obs, reward, done, info = self.env.step(rescaled_action)
-                        inter_reward2+=reward
-                        if(act_rep%1==0):
-                            self.replay_buffer1.add(inter_obs, action, reward, new_obs, float(done))
-                            inter_obs=new_obs
-                        if((act_rep+1)%2==0):
-                            self.replay_buffer2.add(inter_obs2, action, inter_reward2, new_obs, float(done))
-                            inter_obs2=new_obs
-                            inter_reward2=0
-                            
-                            
-                            
+                        new_obs, reward, done, info = self.env.step(rescaled_action[:len(rescaled_action)-1])
                         repeated_reward+=reward
+                        buffer_action = action.copy()
+                        buffer_action[-1] = (rescaled_action[-1]+4-int(rescaled_action[-1]+4))+repeat_step+1 - 4
+                        # print("Sub actions for: {}".format(buffer_action[-1]))
+
+                        # Add extra supervision
+                        self.replay_buffer.add(obs, action, repeated_reward, new_obs, float(done))
+
                         if done:
                             break
                     reward = repeated_reward

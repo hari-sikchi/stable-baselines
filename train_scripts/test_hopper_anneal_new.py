@@ -44,20 +44,22 @@ print("Log data :{}".format(log_data.item()))
 
 obs = env.reset()
 cum_reward=0
+step = 0
 while True:
     action, _states = model.predict(obs)
 
     if model.use_action_repeat:
-        for _ in range(model.action_repetition):
+        for _ in range(1):#model.action_repetition):
             obs, rewards, dones, info = env.step(action)
             cum_reward+=rewards
     else:
         obs, rewards, dones, info = env.step(action)
-        cum_reward+=rewards        
+        cum_reward+=rewards
+    step+=1
     if(dones):
         obs = env.reset()
         break
     #print(rewards)
     #env.render()
 
-print("Reward :{}".format(cum_reward))
+print("Reward :{}, steps :{}".format(cum_reward,step))
