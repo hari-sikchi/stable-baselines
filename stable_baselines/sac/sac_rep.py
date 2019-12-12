@@ -493,7 +493,7 @@ class SAC_REP(OffPolicyRLModel):
                         # print("Sub actions for: {}".format(buffer_action[-1]))
 
                         # Add extra supervision
-                        self.replay_buffer.add(obs, action, repeated_reward, new_obs, float(done))
+                        # self.replay_buffer.add(obs, action, repeated_reward, new_obs, float(done))
 
                         if done:
                             break

@@ -133,7 +133,7 @@ class SAC(OffPolicyRLModel):
         self.processed_obs_ph = None
         self.processed_next_obs_ph = None
         self.log_ent_coef = None
-        self.action_repetition=4
+        self.action_repetition=2
         self.poisson = False
 
         if _init_setup_model:
@@ -369,17 +369,23 @@ class SAC(OffPolicyRLModel):
         return policy_loss, qf1_loss, qf2_loss, value_loss, entropy
 
     def learn(self, total_timesteps, callback=None,
-              log_interval=4, tb_log_name="SAC", reset_num_timesteps=True, replay_wrapper=None,use_action_repeat = False,poisson=False):
+              log_interval=4, tb_log_name="SAC", reset_num_timesteps=True, replay_wrapper=None,use_action_repeat = False,poisson=False,skip_q_curriculum = False,
+              state_space_discretization = False,discretization_bounds=100000):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
         self.use_action_repeat=use_action_repeat
         # self.action_repetition = 0.8
+        self.skip_q_curriculum=skip_q_curriculum
         self.running_action_repetition = self.action_repetition
+        self.state_space_discretization = state_space_discretization
         self.poisson=poisson
         self.poisson_action = 4
         self.poisson_mean = 4
         self.replay_buffer2 = ReplayBuffer(self.buffer_size)
         self.replay_buffer1 = ReplayBuffer(self.buffer_size)
+        self.skip_q = 5
+        self.discretization_bounds = discretization_bounds
+        self.running_skip_q=self.skip_q
         prev_action = None
         # self.prob_past = 0.6
             #self.env.act_rep-=(21-4)/float(total_timesteps)
@@ -422,20 +428,29 @@ class SAC(OffPolicyRLModel):
                     self.poisson_mean-=((5)/float(total_timesteps))
                     if(self.poisson_action<1):
                         self.poisson_action=1
+                        
+                
+                if self.skip_q_curriculum:
+                    amount = ((4)/float(total_timesteps))
+                    self.running_skip_q -=   amount
+                    self.skip_q =  int(self.running_skip_q)
+                    if(self.skip_q<=1):
+                        self.skip_q=1         
+            
                 if use_action_repeat:
                     # self.action_repetition-=((0.9)/float(total_timesteps))
                     amount = ((4)/float(total_timesteps))
-                    self.running_action_repetition -= amount
+                    # self.running_action_repetition -= amount
                     # print("Action repetition is :{}".format(self.action_repetition))
                     if(self.running_action_repetition<=2 and self.running_action_repetition>1):
-                        if(self.action_repetition==4):
-                            print("Flushing replay buffer 4, {} prev_size: {} new size: {}".format(self.action_repetition,len(self.replay_buffer),len(self.replay_buffer2)))
-                            self.replay_buffer = self.replay_buffer2
+                        # if(self.action_repetition==4):
+                            # print("Flushing replay buffer 4, {} prev_size: {} new size: {}".format(self.action_repetition,len(self.replay_buffer),len(self.replay_buffer2)))
+                            # self.replay_buffer = self.replay_buffer2
                         self.action_repetition=2
                     if(self.running_action_repetition<=1):
-                        if(self.action_repetition==2):
-                            print("Flushing replay buffer 4, {} prev_size: {} new size: {}".format(self.action_repetition,len(self.replay_buffer2),len(self.replay_buffer1)))
-                            self.replay_buffer = self.replay_buffer1
+                        # if(self.action_repetition==2):
+                            # print("Flushing replay buffer 4, {} prev_size: {} new size: {}".format(self.action_repetition,len(self.replay_buffer2),len(self.replay_buffer1)))
+                            # self.replay_buffer = self.replay_buffer1
                         self.action_repetition=1
                         
                     # self.action_repetition = (self.action_repetition*amount +self.action_repetition-amount)/(1-amount+amount*self.action_repetition)
@@ -454,78 +469,160 @@ class SAC(OffPolicyRLModel):
                     if callback(locals(), globals()) is False:
                         break
 
-                # Before training starts, randomly sample actions
-                # from a uniform distribution for better exploration.
-                # Afterwards, use the learned policy
-                # if random_exploration is set to 0 (normal setting)
-                if (self.num_timesteps < self.learning_starts
-                    or np.random.rand() < self.random_exploration):
-                    # No need to rescale when sampling random action
-                    rescaled_action = action = self.env.action_space.sample()
-                else:
-                    if poisson:
-                        action = self.policy_tf.step(np.concatenate((obs,np.array([self.poisson_action])))[None], deterministic=False).flatten()
-                    else:    
-                        action = self.policy_tf.step(obs[None], deterministic=False).flatten()
-                    # Add noise to the action (improve exploration,
-                    # not needed in general)
-                    if self.action_noise is not None:
-                        action = np.clip(action + self.action_noise(), -1, 1)
-                    # Rescale from [-1, 1] to the correct bounds
-                    rescaled_action = action * np.abs(self.action_space.low)
+                if self.skip_q_curriculum:
+                    repeated_reward = 0
+                    obs_present= obs.copy()
+                    # print("Skipping in Q space for {} values".format(self.skip_q))
+                    for act_rep in range(self.skip_q):                        
+                        if (self.num_timesteps < self.learning_starts
+                            or np.random.rand() < self.random_exploration):
+                            # No need to rescale when sampling random action
+                            rescaled_action = action = self.env.action_space.sample()
+                        else:
+                            if poisson:
+                                action = self.policy_tf.step(np.concatenate((obs,np.array([self.poisson_action])))[None], deterministic=False).flatten()
+                            else:    
+                                action = self.policy_tf.step(obs[None], deterministic=False).flatten()
+                            # Add noise to the action (improve exploration,
+                            # not needed in general)
+                            if self.action_noise is not None:
+                                action = np.clip(action + self.action_noise(), -1, 1)
+                            # Rescale from [-1, 1] to the correct bounds
+                            rescaled_action = action * np.abs(self.action_space.low)
 
-                # if use_action_repeat and prev_action is not None:
-                #     if(np.random.uniform(0,1)<self.action_repetition):
-                #         rescaled_action=prev_action
-                
-                assert action.shape == self.env.action_space.shape
-                
-                # Add action repetition
-                inter_obs = obs.copy()
-                inter_obs2 = obs.copy()
-                inter_reward2 = 0
-                # print("Action repetition is {}".format(self.action_repetition))
-                if self.use_action_repeat: 
-                    repeated_reward = 0
-                    for act_rep in range(self.action_repetition):
-                        # print("Repeating actions for: {}".format(self.action_repetition))
-                        prev_action = rescaled_action
+                        # if use_action_repeat and prev_action is not None:
+                        #     if(np.random.uniform(0,1)<self.action_repetition):
+                        #         rescaled_action=prev_action
+                        
+                        assert action.shape == self.env.action_space.shape                
+
                         new_obs, reward, done, info = self.env.step(rescaled_action)
-                        inter_reward2+=reward
-                        if(act_rep%1==0):
-                            self.replay_buffer1.add(inter_obs, action, reward, new_obs, float(done))
-                            inter_obs=new_obs
-                        if((act_rep+1)%2==0):
-                            self.replay_buffer2.add(inter_obs2, action, inter_reward2, new_obs, float(done))
-                            inter_obs2=new_obs
-                            inter_reward2=0
-                            
-                            
-                            
+                        obs = new_obs
                         repeated_reward+=reward
                         if done:
                             break
-                    reward = repeated_reward
-                elif poisson:
-                    repeated_reward = 0
-                    # print("Poisson repetition is {}".format(self.poisson_action))
-                    for _ in range(self.poisson_action):
-                        # print("Repeating actions for: {}".format(self.action_repetition))
-                        prev_action = rescaled_action
-                        new_obs, reward, done, info = self.env.step(rescaled_action)
-                        repeated_reward+=reward
-                        if done:
-                            break
-                    reward = repeated_reward
                     
-                else:
-                    new_obs, reward, done, info = self.env.step(rescaled_action)
+                    reward = repeated_reward
+                    self.replay_buffer.add(obs_present, action, reward, new_obs, float(done))
+                else:                
                 
-                # Store transition in the replay buffer.
-                if poisson:
-                    self.replay_buffer.add(np.concatenate((obs,np.array([self.poisson_action]))), action, reward, np.concatenate((new_obs,np.array([self.poisson_action]))), float(done))
-                else:   
-                    self.replay_buffer.add(obs, action, reward, new_obs, float(done))
+                
+                
+                
+                    # Before training starts, randomly sample actions
+                    # from a uniform distribution for better exploration.
+                    # Afterwards, use the learned policy
+                    # if random_exploration is set to 0 (normal setting)
+                    if (self.num_timesteps < self.learning_starts
+                        or np.random.rand() < self.random_exploration):
+                        # No need to rescale when sampling random action
+                        rescaled_action = action = self.env.action_space.sample()
+                    else:
+                        if poisson:
+                            action = self.policy_tf.step(np.concatenate((obs,np.array([self.poisson_action])))[None], deterministic=False).flatten()
+                        else:    
+                            action = self.policy_tf.step(obs[None], deterministic=False).flatten()
+                        # Add noise to the action (improve exploration,
+                        # not needed in general)
+                        if self.action_noise is not None:
+                            action = np.clip(action + self.action_noise(), -1, 1)
+                        # Rescale from [-1, 1] to the correct bounds
+                        rescaled_action = action * np.abs(self.action_space.low)
+
+                    # if use_action_repeat and prev_action is not None:
+                    #     if(np.random.uniform(0,1)<self.action_repetition):
+                    #         rescaled_action=prev_action
+                    
+                    assert action.shape == self.env.action_space.shape
+                    
+                    # Add action repetition
+                    inter_obs = obs.copy()
+                    inter_obs2 = obs.copy()
+                    inter_reward2 = 0
+                    # print("Action repetition is {}".format(self.action_repetition))
+                    # print(obs)
+                    discretized_obs = ((((np.array(obs)+5))/10.)*self.discretization_bounds).astype(np.int32)
+                    # print("Discretized obs: {}".format(discretized_obs))
+                    if self.state_space_discretization:
+                        
+                        repeated_reward = 0
+                        max_box_timesteps = 1000
+                        box_steps= 0
+                        while True:
+                            # print("Repeating actions for: {}".format(self.action_repetition))
+                            prev_action = rescaled_action
+                            new_obs, reward, done, info = self.env.step(rescaled_action)
+                            repeated_reward+=reward
+                            box_steps+=1
+                            new_discretized_obs = (((np.array(new_obs)+5)/10.)*self.discretization_bounds).astype(np.int32)
+                            # print("Discretized obs: {}".format(discretized_obs))
+                            # print("New Discretized obs: {}".format(new_discretized_obs))
+                            array_equal = True
+                            for indx, el in enumerate(new_discretized_obs[:-2]):
+                                if(el!=discretized_obs[indx]):
+                                    # print(indx,discretized_obs[indx])
+                                    array_equal=False
+                                    break
+                                
+                            if(not(array_equal) or max_box_timesteps<=box_steps):
+                                # print(not(array_equal),max_box_timesteps<=box_steps)
+                                # print("break")
+                                break
+                            if done:
+                                break
+                        reward = repeated_reward
+                                                     
+                        
+                        
+                    
+                    elif self.use_action_repeat: 
+                        repeated_reward = 0
+                        for act_rep in range(self.action_repetition):
+                            # print("Repeating actions for: {}".format(self.action_repetition))
+                            prev_action = rescaled_action
+                            new_obs, reward, done, info = self.env.step(rescaled_action)
+                            inter_reward2+=reward
+                            if(act_rep%1==0):
+                                self.replay_buffer1.add(inter_obs, action, reward, new_obs, float(done))
+                                inter_obs=new_obs
+                            if((act_rep+1)%2==0):
+                                self.replay_buffer2.add(inter_obs2, action, inter_reward2, new_obs, float(done))
+                                inter_obs2=new_obs
+                                inter_reward2=0
+                                
+                                
+                                
+                            repeated_reward+=reward
+                            if done:
+                                break
+                        reward = repeated_reward
+                             
+                    elif poisson:
+                        repeated_reward = 0
+                        # print("Poisson repetition is {}".format(self.poisson_action))
+                        for _ in range(self.poisson_action):
+                            # print("Repeating actions for: {}".format(self.action_repetition))
+                            prev_action = rescaled_action
+                            new_obs, reward, done, info = self.env.step(rescaled_action)
+                            repeated_reward+=reward
+                            if done:
+                                break
+                        reward = repeated_reward
+                        
+                    else:
+                        new_obs, reward, done, info = self.env.step(rescaled_action)
+                    
+                    # Store transition in the replay buffer.
+                    if poisson:
+                        self.replay_buffer.add(np.concatenate((obs,np.array([self.poisson_action]))), action, reward, np.concatenate((new_obs,np.array([self.poisson_action]))), float(done))
+                    else:   
+                        self.replay_buffer.add(obs, action, reward, new_obs, float(done))
+                    
+                    
+                    
+                    
+                
+                
                 obs = new_obs
 
                 # Retrieve reward and episode length if using Monitor wrapper
@@ -662,6 +759,36 @@ class SAC(OffPolicyRLModel):
                 "policy_kwargs": self.policy_kwargs,
                 "action_repetition": self.action_repetition
             }
+        elif self.skip_q_curriculum:
+            data = {
+                "learning_rate": self.learning_rate,
+                "buffer_size": self.buffer_size,
+                "learning_starts": self.learning_starts,
+                "train_freq": self.train_freq,
+                "batch_size": self.batch_size,
+                "tau": self.tau,
+                "ent_coef": self.ent_coef if isinstance(self.ent_coef, float) else 'auto',
+                "target_entropy": self.target_entropy,
+                # Should we also store the replay buffer?
+                # this may lead to high memory usage
+                # with all transition inside
+                # "replay_buffer": self.replay_buffer
+                "gamma": self.gamma,
+                "verbose": self.verbose,
+                "observation_space": self.observation_space,
+                "action_space": self.action_space,
+                "policy": self.policy,
+                "n_envs": self.n_envs,
+                "n_cpu_tf_sess": self.n_cpu_tf_sess,
+                "seed": self.seed,
+                "action_noise": self.action_noise,
+                "random_exploration": self.random_exploration,
+                "_vectorize_action": self._vectorize_action,
+                "policy_kwargs": self.policy_kwargs,
+                "skip_q": self.skip_q
+            }            
+            
+            
         elif self.poisson:
             data = {
                 "learning_rate": self.learning_rate,

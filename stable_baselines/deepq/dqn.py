@@ -238,8 +238,10 @@ class DQN(OffPolicyRLModel):
                 # Do not train if the warmup phase is not over
                 # or if there are not enough samples in the replay buffer
                 can_sample = self.replay_buffer.can_sample(self.batch_size)
+                can_sample =True # HARSHIT
                 if can_sample and self.num_timesteps > self.learning_starts \
                     and self.num_timesteps % self.train_freq == 0:
+                    # print("Sampling and performing update")
                     # Minimize the error in Bellman's equation on a batch sampled from replay buffer.
                     if self.prioritized_replay:
                         experience = self.replay_buffer.sample(self.batch_size,

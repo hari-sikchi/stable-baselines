@@ -144,24 +144,19 @@ class BayesianUCB(Solver):
 
 
 
-seed = 100
+seed = 500
 set_global_seeds(seed)
-
-
-
-
-
 
 
 best_mean_reward, n_steps = -np.inf, 0
 best_eval_mean_reward = -np.inf
-log_dir = "logs/mujoco/HalfCheetah_bayesianUCB_"+str(seed)+"/"
+log_dir = "logs/mujoco/Swimmer_UCB_"+str(seed)+"/"
 os.makedirs(log_dir, exist_ok=True)
 log_data = {'dt':[],'eval':[],'train':[],'timesteps':[]}
 
 f = open(log_dir+"eval.txt", "w")
 
-test_env = DummyVecEnv([lambda: gym.make("HalfCheetah-v2")])
+test_env = DummyVecEnv([lambda: gym.make("Swimmer-v2")])
 max_eval_timesteps = 5000
 prev_dt_eval = 0
 dt_agent = UCB1Agent(4)
@@ -171,12 +166,6 @@ bayes_agent = BayesianUCB()
 # Automatically normalize the input features
 # test_env = VecNormalize(test_env, norm_obs=True, norm_reward=False,
 #                         clip_obs=10.)
-
-
-
-
-
-
 
 
 
@@ -222,14 +211,14 @@ def callback(_locals, _globals):
         dt_reward = mean_reward-prev_dt_eval
         
         
-        bayes_agent.update(dt_reward/100.0)
+        # bayes_agent.update(dt_reward/100.0)
           
-        # dt_agent.update(dt_reward/100.0)
+        dt_agent.update(dt_reward/100.0)
         print("Mean reward last dt: {}".format(dt_reward))
         # print("New means: {}".format(dt_agent.means))
         prev_dt_eval=mean_reward
-        new_dt = int(bayes_agent.run_one_step()) + 1
-        # new_dt = int(dt_agent.play())+1
+        # new_dt = int(bayes_agent.run_one_step()) + 1
+        new_dt = int(dt_agent.play())+1
         model.action_repetition=new_dt
         print("Action repetition is :{}".format(model.action_repetition))
         print("Steps: {} 100 Episode eval: {} Best eval {} ".format(n_steps,mean_reward,best_eval_mean_reward))
@@ -277,7 +266,7 @@ def callback(_locals, _globals):
 # env_s = Monitor(env_s, log_dir, allow_early_resets=True)
 print("Starting Experiment with seed: {}".format(seed))
 
-env = DummyVecEnv([lambda: gym.make("HalfCheetah-v2")])
+env = DummyVecEnv([lambda: gym.make("Swimmer-v2")])
 
 # Automatically normalize the input features
 # env = VecNormalize(env, norm_obs=True, norm_reward=False,
@@ -290,8 +279,8 @@ env = Monitor(env.envs[0], log_dir, allow_early_resets=True)
 model = SAC(MlpPolicy, env, verbose=1)
 #model = PPO2(MlpPolicy, env,verbose=True)
 
-# dt = int(dt_agent.play())+1
-model.action_repetition=1
+dt = int(dt_agent.play())+1
+# model.action_repetition=1
 # print("Action repetition is :{}".format(model.action_repetition))
 model.learn(total_timesteps=1000000,use_action_repeat= True, callback=callback)
 f.close()

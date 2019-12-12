@@ -17,7 +17,7 @@ import json
 best_mean_reward, n_steps = -np.inf, 0
 best_eval_mean_reward = -np.inf
 seed = 500 
-log_dir = "logs/mujoco/Hopper_state_dependent_extra_supervision_"+str(seed)+ "/"
+log_dir = "logs/mujoco/Hopper_state_dependent_onbase_correct_"+str(seed)+ "/"
 os.makedirs(log_dir, exist_ok=True)
 log_data = {'dt':[],'eval':[],'train':[],'timesteps':[]}
 
@@ -55,7 +55,7 @@ def callback(_locals, _globals):
                 # print(action.shape)
                 # print(action[0])
                 if model.use_action_repeat:
-                    for _ in range(int(action[0][-1])+4):
+                    for _ in range(1):#int(action[0][-1])+4):
                         # print(action)
                         obs, rewards, dones, info = test_env.step(action[0][:len(action[0])-1])
                         total_reward+=rewards

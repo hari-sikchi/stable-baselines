@@ -13,7 +13,7 @@ import random
 from stable_baselines.bench import Monitor
 from stable_baselines.results_plotter import load_results, ts2xy
 import json
-
+from stable_baselines.common import set_global_seeds
 
 
 class UCB1Agent:
@@ -73,11 +73,16 @@ class UCB1Agent:
 
 
 
+seed = 400
+set_global_seeds(seed)
+
+
 
 
 best_mean_reward, n_steps = -np.inf, 0
 best_eval_mean_reward = -np.inf
-log_dir = "logs/mujoco/Hopper_bandit3/"
+log_dir = "logs/mujoco/Hopper_dump_"+str(seed)+"/"
+# log_dir = "logs/mujoco/Hopper_bandit3/"
 os.makedirs(log_dir, exist_ok=True)
 log_data = {'dt':[],'eval':[],'train':[],'timesteps':[]}
 
@@ -140,9 +145,13 @@ def callback(_locals, _globals):
         mean_reward=total_reward/100.0
         dt_reward = mean_reward-prev_dt_eval
         dt_agent.update(dt_reward/100.0)
-        prev_dt_eval=dt_reward
+        print("Mean reward last dt: {}".format(dt_reward))
+
+        prev_dt_eval=mean_reward
         new_dt = int(dt_agent.play())+1
         model.action_repetition=new_dt
+        print("Action repetition is :{}".format(model.action_repetition))
+
         print("Steps: {} 100 Episode eval: {} Best eval {} ".format(n_steps,mean_reward,best_eval_mean_reward))
         f.write("Steps: {} 100 Episode eval: {} Best eval {}\n".format(n_steps,mean_reward,best_eval_mean_reward))
         if mean_reward > best_eval_mean_reward:
@@ -178,7 +187,7 @@ def callback(_locals, _globals):
     # Returning False will stop training early
     return True
 
-
+print("Starting Experiment with seed: {}".format(seed))
 # env_s= lambda: gym.make("HopperEnvRep-v0")
 # env_s = Monitor(env_s, log_dir, allow_early_resets=True)
 

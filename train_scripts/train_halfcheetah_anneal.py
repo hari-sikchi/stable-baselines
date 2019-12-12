@@ -12,11 +12,12 @@ import matplotlib.pyplot as plt
 from stable_baselines.common import set_global_seeds
 from stable_baselines.bench import Monitor
 from stable_baselines.results_plotter import load_results, ts2xy
+
 import json
 best_mean_reward, n_steps = -np.inf, 0
 best_eval_mean_reward = -np.inf
 seed = 500 
-log_dir = "logs/mujoco/HalfCheetah_buffer_anneal_"+str(seed)+ "/"
+log_dir = "logs/mujoco/HalfCheetah_fixed_rep_2_new_"+str(seed)+ "/"
 os.makedirs(log_dir, exist_ok=True)
 log_data = {'dt':[],'eval':[],'train':[],'timesteps':[]}
 
