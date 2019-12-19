@@ -15,12 +15,12 @@ from stable_baselines.results_plotter import load_results, ts2xy
 import json
 best_mean_reward, n_steps = -np.inf, 0
 best_eval_mean_reward = -np.inf
-seed = 100 
-log_dir = "logs/mujoco/Hopper_replay_intelligent_flush_"+str(seed)+ "/"
+seed = 600 
+log_dir = "logs/mujoco/Hopper_anneal_corrected_specialBuffer_gammaDiscounted_withoutentropy_"+str(seed)+ "/"
 os.makedirs(log_dir, exist_ok=True)
 log_data = {'dt':[],'eval':[],'train':[],'timesteps':[]}
 
-f = open(log_dir+"eval.txt", "w")
+# f = open(log_dir+"eval.txt", "w")
 set_global_seeds(seed)
 test_env = DummyVecEnv([lambda: gym.make("Hopper-v2")])
 max_eval_timesteps = 5000
@@ -50,27 +50,18 @@ def callback(_locals, _globals):
             obs = test_env.reset()
             while not dones:
                 action, _states = model.predict(obs)
-                if model.use_action_repeat:
-                    for _ in range(1):
-                        obs, rewards, dones, info = test_env.step(action)
-                        total_reward+=rewards
-                        timesteps+=1
-                        if(timesteps==max_eval_timesteps):
-                            dones=True
-                        if(dones):
-                            break
-                else:
-                    timesteps+=1
-                    obs, rewards, dones, info = test_env.step(action)
-                    total_reward+=rewards
-                    if(timesteps==max_eval_timesteps):
-                        dones=True
+                timesteps+=1
+                obs, rewards, dones, info = test_env.step(action)
+                total_reward+=rewards
+                if(timesteps==max_eval_timesteps):
+                    dones=True
 
                 if(dones):
                     break
         mean_reward=total_reward/100.0
+        print("Value of gamma is: {}".format(model.gamma))
         print("Steps: {} 100 Episode eval: {} Best eval {} ".format(n_steps,mean_reward,best_eval_mean_reward))
-        f.write("Steps: {} 100 Episode eval: {} Best eval {}\n".format(n_steps,mean_reward,best_eval_mean_reward))
+        # f.write("Steps: {} 100 Episode eval: {} Best eval {}\n".format(n_steps,mean_reward,best_eval_mean_reward))
         if mean_reward > best_eval_mean_reward:
             best_eval_mean_reward = mean_reward
             # Example for saving best model
@@ -122,8 +113,8 @@ model = SAC(MlpPolicy, env, verbose=1)
 print("Starting Experiment with seed: {}".format(seed))
 
 #model = PPO2(MlpPolicy, env,verbose=True)
-model.learn(total_timesteps=1000000,use_action_repeat= True,poisson=False, callback=callback)
-f.close()
+model.learn(total_timesteps=1000000,use_action_repeat= True,poisson=False, callback=callback,only_explore_with_act_rep = False)
+# f.close()
 # json = json.dumps(log_data)
 # f = open(log_dir+"log_data.json","w")
 # f.write(json)

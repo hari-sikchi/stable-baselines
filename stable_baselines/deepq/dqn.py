@@ -149,10 +149,12 @@ class DQN(OffPolicyRLModel):
                 self.summary = tf.summary.merge_all()
 
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="DQN",
-              reset_num_timesteps=True, replay_wrapper=None):
+              reset_num_timesteps=True, replay_wrapper=None,use_action_repeat = False,action_repeat = 4):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
-
+        self.action_repetition = action_repeat
+        self.running_action_repetition = action_repeat
+        self.use_action_repeat = use_action_repeat
         with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, tb_log_name, new_tb_log) \
                 as writer:
             self._setup_learn()
@@ -188,6 +190,13 @@ class DQN(OffPolicyRLModel):
             self.episode_reward = np.zeros((1,))
 
             for _ in range(total_timesteps):
+                
+                if use_action_repeat:
+                    self.running_action_repetition-=(action_repeat-1)/float(total_timesteps)
+                    self.action_repetition = int(self.running_action_repetition)
+                    if(self.action_repetition<=1):
+                        self.action_repetition=1
+                
                 if callback is not None:
                     # Only stop training if return value is False, not when it is None. This is for backwards
                     # compatibility with callbacks that have no return statement.
@@ -214,7 +223,19 @@ class DQN(OffPolicyRLModel):
                     action = self.act(np.array(obs)[None], update_eps=update_eps, **kwargs)[0]
                 env_action = action
                 reset = False
-                new_obs, rew, done, info = self.env.step(env_action)
+                
+                repeated_reward = 0
+                
+                if(self.use_action_repeat):
+                    # print("Action repetition is : {}".format(self.action_repetition))
+                    for i in range(self.action_repetition):
+                        new_obs, rew, done, info = self.env.step(env_action)
+                        repeated_reward+=rew
+                        if(done):
+                            break
+                    rew = repeated_reward
+                else:       
+                    new_obs, rew, done, info = self.env.step(env_action)
                 # Store transition in the replay buffer.
                 self.replay_buffer.add(obs, action, rew, new_obs, float(done))
                 obs = new_obs
@@ -304,12 +325,13 @@ class DQN(OffPolicyRLModel):
 
         observation = observation.reshape((-1,) + self.observation_space.shape)
         with self.sess.as_default():
-            actions, _, _ = self.step_model.step(observation, deterministic=deterministic)
+            # print(self.step_model.step(observation, deterministic=deterministic))
+            actions, q_value, _ = self.step_model.step(observation, deterministic=deterministic)
 
         if not vectorized_env:
             actions = actions[0]
 
-        return actions, None
+        return actions, q_value
 
     def action_probability(self, observation, state=None, mask=None, actions=None, logp=False):
         observation = np.array(observation)

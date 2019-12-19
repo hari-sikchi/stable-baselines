@@ -18,10 +18,51 @@ from stable_baselines.common import set_global_seeds
 from stable_baselines.bench import Monitor
 from stable_baselines.results_plotter import load_results, ts2xy
 import json
+import matplotlib.pyplot as plt
+
 seed = 500
 set_global_seeds(seed)
+def moving_average(values, window):
+    """
+    Smooth values by doing a moving average
+    :param values: (numpy array)
+    :param window: (int)
+    :return: (numpy array)
+    """
+    weights = np.repeat(1.0, window) / window
+    return np.convolve(values, weights, 'valid')
+
+def plot_and_save(log_data,log_dir,title="Learning curve"):
+
+    data = log_data
+    y1 = np.array(data['eval_loss'])
+    y2 = np.array(data['dt'])
+
+    x = np.array(data['iters'])
+    # print(x)
+    y1 = moving_average(y1, window=50)
+
+    # print(x.shape)
+    # print(y1.shape)
+    # print(y2.shape)
+    
+    # Truncate x
+    x = x[len(x) - len(y1):]
+    # x = x[len(x) - len(y2):]
 
 
+    fig = plt.figure(title)
+
+    plt.plot(x, y1,label="Eval loss")
+    # plt.plot(x, y2,label="Action Repeat")
+    
+    plt.xlabel('Iters')
+    plt.ylabel('Evaluation')
+    plt.title(title)
+    plt.legend(loc = "upper left")
+    plt.savefig(log_dir+"learning_curve.png")
+    plt.clf()               
+    
 
 class RandomWalkEnv(gym.Env):
     def __init__(self,total_states = '100'):
@@ -60,7 +101,11 @@ class RandomWalkEnv(gym.Env):
         # print("Env state:{}",self.state)
         reward = 0
         done=False
+        ## Simplest task
         
+        
+        
+        ## Harder task
         if(self.state == 0 and action==1):
             self.state = self.state
             reward = 0
@@ -78,7 +123,15 @@ class RandomWalkEnv(gym.Env):
         elif action==0:
             self.state=self.state-1
         elif action==1:
-            self.state = self.state+1        
+            self.state = self.state+1                
+        
+        
+        
+        
+        ### Most difficult task
+        
+        
+
         
         
         # if action==0 and self.state%2==0:
@@ -106,9 +159,9 @@ class RandomWalkEnv(gym.Env):
         return np.array([normalized_state]).reshape(1,),reward,done,{}
         
 results = {'horizon':[],'steps':[],'q_values':[]}
- 
-for horizon in range(20):
-    # horizon = 1
+train_results = {'iters':[],'eval_loss':[],'dt':[]} 
+for horizon in range(1):
+    horizon = 10
     best_mean_reward, n_steps = -np.inf, 0
     max_timesteps=horizon+1
     steps_to_solve = 0
@@ -145,15 +198,19 @@ for horizon in range(20):
                     if(dones):
                         break
             mean_reward=total_reward
-            print(max_timesteps)
+            print(timesteps)
             print("****************************")
             state_q = [] 
+            
+            train_results['iters'].append(n_steps)
+            train_results['eval_loss'].append(pow(0.99,timesteps)*1000)
+            train_results['dt'].append(model.action_repetition)
             for state in range(test_env.total_states):
                 normalized_state = state/float(test_env.total_states)-1
                 normalized_state=np.array(normalized_state).reshape(1,1)
                 state_q.append(model.predict(np.array(normalized_state).reshape(1,1))[1])
                 # q_horizon.append(model.predict(np.array(normalized_state).reshape(1,1))[1])
-                print("State: {}, Action prob:{} | {}".format(state,model.action_probability(normalized_state),model.predict(np.array(normalized_state).reshape(1,1))[1]))
+                # print("State: {}, Action prob:{} | {}".format(state,model.action_probability(normalized_state),model.predict(np.array(normalized_state).reshape(1,1))[1]))
                 # print("Q_values:{}".format(model.step_model.q_values(normalized_state)))
             q_horizon.append(state_q)
             print("****************************")
@@ -162,16 +219,11 @@ for horizon in range(20):
                 print("Timesteps required to solve the task:{} Horizon: {}".format(steps_to_solve,horizon+1))
                 # results.append(steps_to_solve)
                 results['steps'].append(steps_to_solve)
-                return False
+                #return False
         n_steps += 1
         
         # Returning False will stop training early
         return True
-
-
-
-
-
 
 
 
@@ -181,12 +233,14 @@ for horizon in range(20):
     # Instantiate the agent
     model = DQN('MlpPolicy', env, learning_rate=1e-3,learning_starts=1, prioritized_replay=True,verbose=1)
     # Train the agent
-    model.learn(total_timesteps=int(2e5),log_interval=10000, callback=callback)
+    model.learn(total_timesteps=100000,log_interval=10000, callback=callback,use_action_repeat = True,action_repeat = 4)
     results['q_values'].append(q_horizon)
     results['horizon'].append(horizon)
     
     
     
-
-print(results['steps'])
-np.save("results_difficult_20_"+str(seed)+".npy",np.array(results))
+log_dir = "logs/horizon/opt_repeat_"+str(seed)+ "/"
+os.makedirs(log_dir, exist_ok=True)
+print(train_results)
+np.save(log_dir+"train_results_"+str(seed)+".npy",np.array(train_results))
+plot_and_save(train_results,log_dir)

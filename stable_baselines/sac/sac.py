@@ -98,6 +98,7 @@ class SAC(OffPolicyRLModel):
         self.ent_coef = ent_coef
         self.target_update_interval = target_update_interval
         self.gradient_steps = gradient_steps
+        self.original_gamma = gamma
         self.gamma = gamma
         self.action_noise = action_noise
         self.random_exploration = random_exploration
@@ -133,7 +134,7 @@ class SAC(OffPolicyRLModel):
         self.processed_obs_ph = None
         self.processed_next_obs_ph = None
         self.log_ent_coef = None
-        self.action_repetition=2
+        self.action_repetition=4
         self.poisson = False
 
         if _init_setup_model:
@@ -370,7 +371,7 @@ class SAC(OffPolicyRLModel):
 
     def learn(self, total_timesteps, callback=None,
               log_interval=4, tb_log_name="SAC", reset_num_timesteps=True, replay_wrapper=None,use_action_repeat = False,poisson=False,skip_q_curriculum = False,
-              state_space_discretization = False,discretization_bounds=100000):
+              state_space_discretization = False,discretization_bounds=100000,only_explore_with_act_rep = False):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
         self.use_action_repeat=use_action_repeat
@@ -440,19 +441,26 @@ class SAC(OffPolicyRLModel):
                 if use_action_repeat:
                     # self.action_repetition-=((0.9)/float(total_timesteps))
                     amount = ((4)/float(total_timesteps))
-                    # self.running_action_repetition -= amount
+                    self.running_action_repetition -= amount
                     # print("Action repetition is :{}".format(self.action_repetition))
-                    if(self.running_action_repetition<=2 and self.running_action_repetition>1):
-                        # if(self.action_repetition==4):
-                            # print("Flushing replay buffer 4, {} prev_size: {} new size: {}".format(self.action_repetition,len(self.replay_buffer),len(self.replay_buffer2)))
-                            # self.replay_buffer = self.replay_buffer2
+                    # if(self.running_action_repetition<=2 and self.running_action_repetition>1):
+                    if(self.num_timesteps>=(total_timesteps/3.0) and self.num_timesteps<(2*total_timesteps/3.0)):
+                        if(self.action_repetition==4):
+                            # with self.sess.as_default():
+                            #     init_new_vars_op = tf.initialize_variables([self.log_ent_coef])
+                            #     self.sess.run(init_new_vars_op)
+                            print("Flushing replay buffer 4, {} prev_size: {} new size: {}".format(self.action_repetition,len(self.replay_buffer),len(self.replay_buffer2)))
+                            self.replay_buffer = self.replay_buffer2
                         self.action_repetition=2
-                    if(self.running_action_repetition<=1):
-                        # if(self.action_repetition==2):
-                            # print("Flushing replay buffer 4, {} prev_size: {} new size: {}".format(self.action_repetition,len(self.replay_buffer2),len(self.replay_buffer1)))
-                            # self.replay_buffer = self.replay_buffer1
+                    if(self.num_timesteps>=(2*total_timesteps/3.0)):
+                    # if(self.running_action_repetition<=1):
+                        if(self.action_repetition==2):
+                            # with self.sess.as_default():
+                            #     init_new_vars_op = tf.initialize_variables([self.log_ent_coef])
+                            #     self.sess.run(init_new_vars_op)
+                            print("Flushing replay buffer 2, {} prev_size: {} new size: {}".format(self.action_repetition,len(self.replay_buffer),len(self.replay_buffer1)))
+                            self.replay_buffer = self.replay_buffer1
                         self.action_repetition=1
-                        
                     # self.action_repetition = (self.action_repetition*amount +self.action_repetition-amount)/(1-amount+amount*self.action_repetition)
                     # if(self.action_repetition<0):
                     #     self.action_repetition=0
@@ -460,15 +468,17 @@ class SAC(OffPolicyRLModel):
                     # self.running_action_repetition -= ((6-1)/float(total_timesteps))
                 
                     # self.action_repetition = int(self.running_action_repetition)
-                    # if(self.action_repetition<1):
-                    #     self.action_repetition=1
+                    if(self.action_repetition<1):
+                        self.action_repetition=1
+                    self.gamma = pow(self.original_gamma,self.action_repetition)    
+
                     
                 if callback is not None:
                     # Only stop training if return value is False, not when it is None. This is for backwards
                     # compatibility with callbacks that have no return statement.
                     if callback(locals(), globals()) is False:
                         break
-
+                # print(self.env.action_space.low,self.env.action_space.high)
                 if self.skip_q_curriculum:
                     repeated_reward = 0
                     obs_present= obs.copy()
@@ -577,25 +587,79 @@ class SAC(OffPolicyRLModel):
                     
                     elif self.use_action_repeat: 
                         repeated_reward = 0
-                        for act_rep in range(self.action_repetition):
-                            # print("Repeating actions for: {}".format(self.action_repetition))
-                            prev_action = rescaled_action
-                            new_obs, reward, done, info = self.env.step(rescaled_action)
-                            inter_reward2+=reward
-                            if(act_rep%1==0):
-                                self.replay_buffer1.add(inter_obs, action, reward, new_obs, float(done))
-                                inter_obs=new_obs
-                            if((act_rep+1)%2==0):
-                                self.replay_buffer2.add(inter_obs2, action, inter_reward2, new_obs, float(done))
-                                inter_obs2=new_obs
-                                inter_reward2=0
+                        obs_list = [obs]
+                        reward_list = []
+                        done_list = []
+                        
+                        
+                        if not only_explore_with_act_rep:                                                
+                            for act_rep in range(self.action_repetition):
+                                new_obs, reward, done, info = self.env.step(rescaled_action)
+                                obs_list.append(new_obs)
+                                reward_list.append(reward)
+                                done_list.append(done)
+                                if done:
+                                    break
+                            # print("---------------------------------")
+                            # print(obs_list)
+                            # print(reward_list)
+                            # print(done_list)
+                            # print("**********************************")
+                            for i,obs_el in enumerate(obs_list):
+                                rep_rew = 0
+                                gamma_rep = self.original_gamma
+                                for j in range(i+1,len(obs_list)):
+                                    next_obs_el = obs_list[j]
+                                    rep_rew += pow(gamma_rep,j-i-1)*reward_list[j-1]
+                                    # print(j-i-1)
+                                    if(j-i==self.action_repetition):
+                                        # print("Adding to current replay buffer :{}".format(self.action_repetition))
+                                        self.replay_buffer.add(obs_el, action, rep_rew, next_obs_el, float(done_list[j-1]))
+                                        # print("Curr buf")
+                                        # print(obs_el,action,rep_rew,next_obs_el,done_list[j-1])
+                                    elif(j-i==2):
+                                        # print("Adding to rep-2 replay buffer :{}".format(self.action_repetition))
+                                        # print("Rep2 buf")
+                                        # print(obs_el,action,rep_rew,next_obs_el,done_list[j-1])
+
+                                        self.replay_buffer2.add(obs_el, action, rep_rew, next_obs_el, float(done_list[j-1]))
+                                    elif(j-i==1):
+                                        # print("Adding to rep-1 replay buffer :{}".format(self.action_repetition))
+                                        # print("Rep1 buf")
+                                        # print(obs_el,action,rep_rew,next_obs_el,done_list[j-1])
+
+                                        self.replay_buffer1.add(obs_el, action, rep_rew, next_obs_el, float(done_list[j-1]))
+                        else:
+                            prev_obs= obs
+                            for act_rep in range(self.action_repetition):
+                                new_obs, reward, done, info = self.env.step(rescaled_action)
+                                self.replay_buffer.add(prev_obs, action, reward, new_obs, float(done))
+                                prev_obs = new_obs
+                                if done:
+                                    break
+                                        
+                            
+
+                        
+                        # for act_rep in range(self.action_repetition):
+                        #     # print("Repeating actions for: {}".format(self.action_repetition))
+                        #     prev_action = rescaled_action
+                        #     new_obs, reward, done, info = self.env.step(rescaled_action)
+                        #     inter_reward2+=reward#*pow(self.original_gamma,(act_rep)%2)
+                        #     if(act_rep%1==0):
+                        #         self.replay_buffer1.add(inter_obs, action, reward, new_obs, float(done))
+                        #         inter_obs=new_obs
+                        #     if((act_rep+1)%2==0):
+                        #         self.replay_buffer2.add(inter_obs2, action, inter_reward2, new_obs, float(done))
+                        #         inter_obs2=new_obs
+                        #         inter_reward2=0
                                 
                                 
                                 
-                            repeated_reward+=reward
-                            if done:
-                                break
-                        reward = repeated_reward
+                        #     repeated_reward+=reward#*pow(self.original_gamma,act_rep)
+                        #     if done:
+                        #         break
+                        # reward = repeated_reward
                              
                     elif poisson:
                         repeated_reward = 0
@@ -615,7 +679,7 @@ class SAC(OffPolicyRLModel):
                     # Store transition in the replay buffer.
                     if poisson:
                         self.replay_buffer.add(np.concatenate((obs,np.array([self.poisson_action]))), action, reward, np.concatenate((new_obs,np.array([self.poisson_action]))), float(done))
-                    else:   
+                    elif not self.use_action_repeat:   
                         self.replay_buffer.add(obs, action, reward, new_obs, float(done))
                     
                     
@@ -650,6 +714,7 @@ class SAC(OffPolicyRLModel):
                         # Compute current learning_rate
                         frac = 1.0 - step / total_timesteps
                         current_lr = self.learning_rate(frac)
+
                         # Update policy and critics (q functions)
                         mb_infos_vals.append(self._train_step(step, writer, current_lr))
                         # Update target network

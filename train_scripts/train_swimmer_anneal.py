@@ -17,7 +17,7 @@ import json
 best_mean_reward, n_steps = -np.inf, 0
 best_eval_mean_reward = -np.inf
 seed = 500 
-log_dir = "logs/mujoco/Swimmer_buffer_anneal_"+str(seed)+ "/"
+log_dir = "logs/mujoco/Swimmer_dump_"+str(seed)+ "/"
 os.makedirs(log_dir, exist_ok=True)
 log_data = {'dt':[],'eval':[],'train':[],'timesteps':[]}
 
@@ -123,7 +123,7 @@ model = SAC(MlpPolicy, env, verbose=1)
 print("Starting Experiment with seed: {}".format(seed))
 
 #model = PPO2(MlpPolicy, env,verbose=True)
-model.learn(total_timesteps=1000000,use_action_repeat= True,poisson=False, callback=callback)
+model.learn(total_timesteps=3000,use_action_repeat= True,poisson=False, callback=callback,only_explore_with_act_rep = False)
 f.close()
 # json = json.dumps(log_data)
 # f = open(log_dir+"log_data.json","w")
