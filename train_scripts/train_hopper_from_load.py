@@ -1,5 +1,4 @@
 
-
 #from stable_baselines.common.policies import MlpPolicy
 from stable_baselines.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines.sac.policies import MlpPolicy
@@ -17,13 +16,13 @@ import json
 best_mean_reward, n_steps = -np.inf, 0
 best_eval_mean_reward = -np.inf
 seed = 600 
-log_dir = "logs/mujoco/Swimmer_second_half_replay_"+str(seed)+ "/"
+log_dir = "logs/mujoco/Hopper_load_saved_"+str(seed)+ "/"
 os.makedirs(log_dir, exist_ok=True)
 log_data = {'dt':[],'eval':[],'train':[],'timesteps':[]}
 
-f = open(log_dir+"eval.txt", "w")
+# f = open(log_dir+"eval.txt", "w")
 set_global_seeds(seed)
-test_env = DummyVecEnv([lambda: gym.make("Swimmer-v2")])
+test_env = DummyVecEnv([lambda: gym.make("Hopper-v2")])
 max_eval_timesteps = 5000
 # Automatically normalize the input features
 # test_env = VecNormalize(test_env, norm_obs=True, norm_reward=False,
@@ -39,7 +38,7 @@ def callback(_locals, _globals):
     """
 
 
-    global n_steps, best_mean_reward, best_eval_mean_reward
+    global n_steps, best_mean_reward, best_eval_mean_reward,model
     # Print stats every 1000 calls
 
     total_reward=0
@@ -51,27 +50,18 @@ def callback(_locals, _globals):
             obs = test_env.reset()
             while not dones:
                 action, _states = model.predict(obs)
-                if model.use_action_repeat:
-                    for _ in range(1):
-                        obs, rewards, dones, info = test_env.step(action)
-                        total_reward+=rewards
-                        timesteps+=1
-                        if(timesteps==max_eval_timesteps):
-                            dones=True
-                        if(dones):
-                            break
-                else:
-                    timesteps+=1
-                    obs, rewards, dones, info = test_env.step(action)
-                    total_reward+=rewards
-                    if(timesteps==max_eval_timesteps):
-                        dones=True
+                timesteps+=1
+                obs, rewards, dones, info = test_env.step(action)
+                total_reward+=rewards
+                if(timesteps==max_eval_timesteps):
+                    dones=True
 
                 if(dones):
                     break
         mean_reward=total_reward/100.0
+        print("Value of gamma is: {}".format(model.gamma))
         print("Steps: {} 100 Episode eval: {} Best eval {} ".format(n_steps,mean_reward,best_eval_mean_reward))
-        f.write("Steps: {} 100 Episode eval: {} Best eval {}\n".format(n_steps,mean_reward,best_eval_mean_reward))
+        # f.write("Steps: {} 100 Episode eval: {} Best eval {}\n".format(n_steps,mean_reward,best_eval_mean_reward))
         if mean_reward > best_eval_mean_reward:
             best_eval_mean_reward = mean_reward
             # Example for saving best model
@@ -109,22 +99,45 @@ def callback(_locals, _globals):
 # env_s= lambda: gym.make("HopperEnvRep-v0")
 # env_s = Monitor(env_s, log_dir, allow_early_resets=True)
 
-env = DummyVecEnv([lambda: gym.make("Swimmer-v2")])
+env = DummyVecEnv([lambda: gym.make("Hopper-v2")])
 
 # Automatically normalize the input features
 # env = VecNormalize(env, norm_obs=True, norm_reward=False,
 #                            clip_obs=10.)
-env.envs[0].seed(seed)
+
 env = Monitor(env.envs[0], log_dir, allow_early_resets=True)
 
 #env.act_rep = 20
-
 model = SAC(MlpPolicy, env, verbose=1)
+model = model.load("/home/hsikchi/work/stable-baselines/logs/mujoco/Hopper_replay_append_100/best_model_eval.pkl",env)
+
+
+## Eval once
+obs = env.reset()
+cum_reward=0
+step = 0
+while True:
+    action, _states = model.predict(obs)
+
+    obs, rewards, dones, info = env.step(action)
+    cum_reward+=rewards
+    step+=1
+    if(dones):
+        obs = env.reset()
+        break
+    #print(rewards)
+    #env.render()
+
+print("Initialization evaluation :{}, steps :{}".format(cum_reward,step))
+
+## Evaluation complete of intialization
+
+
 print("Starting Experiment with seed: {}".format(seed))
 
 #model = PPO2(MlpPolicy, env,verbose=True)
-model.learn(total_timesteps=1000000,use_action_repeat= True,poisson=False, callback=callback,only_explore_with_act_rep = False)
-f.close()
+model.learn(total_timesteps=1000000,use_action_repeat= False,poisson=False, callback=callback,only_explore_with_act_rep = False)
+# f.close()
 # json = json.dumps(log_data)
 # f = open(log_dir+"log_data.json","w")
 # f.write(json)
@@ -135,76 +148,3 @@ np.save(log_dir+"log_data.npy",log_data)
 # log_dir = "logs/hopper_aneal/"
 # model.save(log_dir + "sac_hopper")
 #env.save(os.path.join(log_dir, "vec_normalize.pkl"))
-
-
-
-
-
-
-
-
-# import gym
-# import numpy as np
-
-# from stable_baselines.common.vec_env import DummyVecEnv, VecNormalize
-# from stable_baselines.sac.policies import MlpPolicy
-# from stable_baselines import PPO2, SAC
-# import hopper_rep
-# import os
-# import gym
-# import os
-# import numpy as np
-# import matplotlib.pyplot as plt
-
-# from stable_baselines.bench import Monitor
-# from stable_baselines.results_plotter import load_results, ts2xy
-
-# env = DummyVecEnv([lambda: gym.make("Swimmer-v2")])
-
-# # Automatically normalize the input features
-# #env = VecNormalize(env, norm_obs=True, norm_reward=False,
-# #                           clip_obs=10.)
-
-
-# # model = SAC(MlpPolicy, env, verbose=1)
-# # model.learn(total_timesteps=50000, log_interval=10)
-# # model.save("sac_pendulum")
-
-# # del model # remove to demonstrate saving and loading
-# env = gym.make("Swimmer-v2")
-
-# model = SAC(MlpPolicy, env, verbose=1)
-
-
-# model = model.load("logs/mujoco/Swimmer_normal/best_model_eval.pkl",env)
-# model.use_action_repeat = True
-# print("Action repetition of loaded model is : {}".format(model.action_repetition))
-# #print(env.obs_rms.mean)
-
-# #env = env.load("logs/mujoco/Hopper_normal_1/vec_normalize.pkl",env)
-# #print(env.obs_rms.mean)
-# log_data = np.load("logs/mujoco/Swimmer_normal/log_data.npy",allow_pickle=True)
-# # print("Log data :{}".format(log_data.item()))
-
-# obs = env.reset()
-# cum_reward=0
-# step = 0
-# while True:
-#     action, _states = model.predict(obs)
-
-#     if model.use_action_repeat:
-#         for _ in range(1):#model.action_repetition):
-#             obs, rewards, dones, info = env.step(action)
-#             cum_reward+=rewards
-#     else:
-#         obs, rewards, dones, info = env.step(action)
-#         cum_reward+=rewards
-#     step+=1
-#     if(dones):
-#         print(dones,info)
-#         obs = env.reset()
-#         break
-#     #print(rewards)
-#     #env.render()
-
-# print("Reward :{}, steps :{}".format(cum_reward,step))

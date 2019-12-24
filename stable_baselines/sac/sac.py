@@ -440,37 +440,46 @@ class SAC(OffPolicyRLModel):
             
                 if use_action_repeat:
                     # self.action_repetition-=((0.9)/float(total_timesteps))
-                    amount = ((4)/float(total_timesteps))
-                    self.running_action_repetition -= amount
-                    # print("Action repetition is :{}".format(self.action_repetition))
-                    # if(self.running_action_repetition<=2 and self.running_action_repetition>1):
-                    if(self.num_timesteps>=(total_timesteps/3.0) and self.num_timesteps<(2*total_timesteps/3.0)):
-                        if(self.action_repetition==4):
-                            # with self.sess.as_default():
-                            #     init_new_vars_op = tf.initialize_variables([self.log_ent_coef])
-                            #     self.sess.run(init_new_vars_op)
-                            print("Flushing replay buffer 4, {} prev_size: {} new size: {}".format(self.action_repetition,len(self.replay_buffer),len(self.replay_buffer2)))
-                            self.replay_buffer = self.replay_buffer2
-                        self.action_repetition=2
-                    if(self.num_timesteps>=(2*total_timesteps/3.0)):
-                    # if(self.running_action_repetition<=1):
-                        if(self.action_repetition==2):
-                            # with self.sess.as_default():
-                            #     init_new_vars_op = tf.initialize_variables([self.log_ent_coef])
-                            #     self.sess.run(init_new_vars_op)
-                            print("Flushing replay buffer 2, {} prev_size: {} new size: {}".format(self.action_repetition,len(self.replay_buffer),len(self.replay_buffer1)))
-                            self.replay_buffer = self.replay_buffer1
-                        self.action_repetition=1
-                    # self.action_repetition = (self.action_repetition*amount +self.action_repetition-amount)/(1-amount+amount*self.action_repetition)
-                    # if(self.action_repetition<0):
-                    #     self.action_repetition=0
-                    # self.env.dec_act_rep((21-4)/float(total_timesteps))
-                    # self.running_action_repetition -= ((6-1)/float(total_timesteps))
-                
-                    # self.action_repetition = int(self.running_action_repetition)
-                    if(self.action_repetition<1):
-                        self.action_repetition=1
-                    self.gamma = pow(self.original_gamma,self.action_repetition)    
+                    if only_explore_with_act_rep:
+                        pass
+                    else:
+                        amount = ((4)/float(total_timesteps))
+                        self.running_action_repetition -= amount
+                        # print("Action repetition is :{}".format(self.action_repetition))
+                        # if(self.running_action_repetition<=2 and self.running_action_repetition>1):
+                        if(self.num_timesteps>=(total_timesteps/3.0) and self.num_timesteps<(2*total_timesteps/3.0)):
+                            if(self.action_repetition==4):
+                                # with self.sess.as_default():
+                                #     init_new_vars_op = tf.initialize_variables([self.log_ent_coef])
+                                #     self.sess.run(init_new_vars_op)
+                                print("Flushing replay buffer 4, {} prev_size: {} new size: {}".format(self.action_repetition,len(self.replay_buffer),len(self.replay_buffer2)))
+                                # self.replay_buffer = self.replay_buffer2
+                                # for tup in self.replay_buffer2._storage:
+                                #     self.replay_buffer.add(*tup)
+
+                            self.action_repetition=2
+                        if(self.num_timesteps>=(2*total_timesteps/3.0)):
+                        # if(self.running_action_repetition<=1):
+                            if(self.action_repetition==2):
+                                # with self.sess.as_default():
+                                #     init_new_vars_op = tf.initialize_variables([self.log_ent_coef])
+                                #     self.sess.run(init_new_vars_op)
+                                print("Flushing replay buffer 2, {} prev_size: {} new size: {}".format(self.action_repetition,len(self.replay_buffer),len(self.replay_buffer1)))
+                                # for tup in self.replay_buffer1._storage:
+                                #     self.replay_buffer.add(*tup)
+                                print(len(self.replay_buffer))
+                                # self.replay_buffer = self.replay_buffer1
+                            self.action_repetition=1
+                        # self.action_repetition = (self.action_repetition*amount +self.action_repetition-amount)/(1-amount+amount*self.action_repetition)
+                        # if(self.action_repetition<0):
+                        #     self.action_repetition=0
+                        # self.env.dec_act_rep((21-4)/float(total_timesteps))
+                        # self.running_action_repetition -= ((6-1)/float(total_timesteps))
+                    
+                        # self.action_repetition = int(self.running_action_repetition)
+                        if(self.action_repetition<1):
+                            self.action_repetition=1
+                        # self.gamma = pow(self.original_gamma,self.action_repetition)    
 
                     
                 if callback is not None:
@@ -592,51 +601,68 @@ class SAC(OffPolicyRLModel):
                         done_list = []
                         
                         
-                        if not only_explore_with_act_rep:                                                
+                        if not only_explore_with_act_rep:
+                            repeated_reward = 0 
                             for act_rep in range(self.action_repetition):
+                                # print("Repeating actions for: {}".format(self.action_repetition))
+                                prev_action = rescaled_action
                                 new_obs, reward, done, info = self.env.step(rescaled_action)
-                                obs_list.append(new_obs)
-                                reward_list.append(reward)
-                                done_list.append(done)
-                                if done:
+                                repeated_reward+=reward
+                                inter_reward2+=reward#*pow(self.original_gamma,(act_rep)%2)
+                                if(act_rep%1==0):
+                                    # self.replay_buffer1.add(inter_obs, action, reward, new_obs, float(done))
+                                    inter_obs=new_obs
+                                if((act_rep+1)%2==0):
+                                    # self.replay_buffer2.add(inter_obs2, action, inter_reward2, new_obs, float(done))
+                                    inter_obs2=new_obs
+                                    inter_reward2=0
+                                  
+                                if(self.action_repetition==4 and (act_rep+1)%4==0):
+                                    self.replay_buffer.add(inter_obs2, action, inter_reward2, new_obs, float(done))
+                                    # print("Adding the second half for action rep 4")
+                                elif(self.action_repetition==2 and (act_rep+1)%2==0):
+                                    self.replay_buffer.add(inter_obs, action, reward, new_obs, float(done))
+                                    # print("Adding the second half for action rep 2")
+                                if(done):
                                     break
-                            # print("---------------------------------")
-                            # print(obs_list)
-                            # print(reward_list)
-                            # print(done_list)
-                            # print("**********************************")
-                            for i,obs_el in enumerate(obs_list):
-                                rep_rew = 0
-                                gamma_rep = self.original_gamma
-                                for j in range(i+1,len(obs_list)):
-                                    next_obs_el = obs_list[j]
-                                    rep_rew += pow(gamma_rep,j-i-1)*reward_list[j-1]
-                                    # print(j-i-1)
-                                    if(j-i==self.action_repetition):
-                                        # print("Adding to current replay buffer :{}".format(self.action_repetition))
-                                        self.replay_buffer.add(obs_el, action, rep_rew, next_obs_el, float(done_list[j-1]))
-                                        # print("Curr buf")
-                                        # print(obs_el,action,rep_rew,next_obs_el,done_list[j-1])
-                                    elif(j-i==2):
-                                        # print("Adding to rep-2 replay buffer :{}".format(self.action_repetition))
-                                        # print("Rep2 buf")
-                                        # print(obs_el,action,rep_rew,next_obs_el,done_list[j-1])
+                                                              
+                            self.replay_buffer.add(obs, action, repeated_reward, new_obs, float(done))
+                            
+                                                                           
+                            # for act_rep in range(self.action_repetition):
+                            #     new_obs, reward, done, info = self.env.step(rescaled_action)
+                            #     obs_list.append(new_obs)
+                            #     reward_list.append(reward)
+                            #     done_list.append(done)
+                            #     if done:
+                            #         break
+                                
 
-                                        self.replay_buffer2.add(obs_el, action, rep_rew, next_obs_el, float(done_list[j-1]))
-                                    elif(j-i==1):
-                                        # print("Adding to rep-1 replay buffer :{}".format(self.action_repetition))
-                                        # print("Rep1 buf")
-                                        # print(obs_el,action,rep_rew,next_obs_el,done_list[j-1])
+                            # for i,obs_el in enumerate(obs_list):
+                            #     rep_rew = 0
+                            #     gamma_rep = self.original_gamma
+                            #     for j in range(i+1,len(obs_list)):
+                            #         next_obs_el = obs_list[j]
+                            #         rep_rew += pow(gamma_rep,j-i-1)*reward_list[j-1]
+                            #         # print(j-i-1)
+                            #         self.replay_buffer.add(obs_el, action, rep_rew, next_obs_el, float(done_list[j-1]))
+                                    
 
-                                        self.replay_buffer1.add(obs_el, action, rep_rew, next_obs_el, float(done_list[j-1]))
                         else:
+                            # Persistent MDP
                             prev_obs= obs
-                            for act_rep in range(self.action_repetition):
+                            act_reps = np.array([1,2,4])
+                            act_rep_sample = int(np.random.choice(act_reps,p=[0.7,0.15,0.15]))
+                            # print(act_rep_sample)
+                            repeated_reward = 0
+                            for act_rep in range(act_rep_sample):
                                 new_obs, reward, done, info = self.env.step(rescaled_action)
-                                self.replay_buffer.add(prev_obs, action, reward, new_obs, float(done))
+                                # self.replay_buffer.add(prev_obs, action, reward, new_obs, float(done))
+                                repeated_reward+=reward
                                 prev_obs = new_obs
                                 if done:
                                     break
+                            self.replay_buffer.add(obs, action, repeated_reward, new_obs, float(done))
                                         
                             
 

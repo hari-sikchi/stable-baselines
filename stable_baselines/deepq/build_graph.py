@@ -408,7 +408,9 @@ def build_train(q_func, ob_space, ac_space, optimizer, sess, grad_norm_clipping=
         q_t_selected_target = rew_t_ph + gamma * q_tp1_best_masked
 
         # compute the error (potentially clipped)
-        td_error = q_t_selected - tf.stop_gradient(q_t_selected_target)
+        td_error = (q_t_selected - tf.stop_gradient(q_t_selected_target))/tf.stop_gradient(q_t_selected)
+        
+        
         errors = tf_util.huber_loss(td_error)
         weighted_error = tf.reduce_mean(importance_weights_ph * errors)
 

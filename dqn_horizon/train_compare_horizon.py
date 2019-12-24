@@ -107,8 +107,8 @@ class RandomWalkEnv(gym.Env):
         
 results = {'horizon':[],'steps':[],'q_values':[]}
  
-for horizon in range(20):
-    # horizon = 1
+for horizon in range(1):
+    horizon = 50
     best_mean_reward, n_steps = -np.inf, 0
     max_timesteps=horizon+1
     steps_to_solve = 0
@@ -152,8 +152,9 @@ for horizon in range(20):
                 normalized_state = state/float(test_env.total_states)-1
                 normalized_state=np.array(normalized_state).reshape(1,1)
                 state_q.append(model.predict(np.array(normalized_state).reshape(1,1))[1])
-                # q_horizon.append(model.predict(np.array(normalized_state).reshape(1,1))[1])
                 print("State: {}, Action prob:{} | {}".format(state,model.action_probability(normalized_state),model.predict(np.array(normalized_state).reshape(1,1))[1]))
+                # q_horizon.append(model.predict(np.array(normalized_state).reshape(1,1))[1])
+                # print("State: {}, Action prob:{} | {}".format(state,model.action_probability(normalized_state),model.predict(np.array(normalized_state).reshape(1,1))[1]))
                 # print("Q_values:{}".format(model.step_model.q_values(normalized_state)))
             q_horizon.append(state_q)
             print("****************************")

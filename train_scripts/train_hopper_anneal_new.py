@@ -15,8 +15,8 @@ from stable_baselines.results_plotter import load_results, ts2xy
 import json
 best_mean_reward, n_steps = -np.inf, 0
 best_eval_mean_reward = -np.inf
-seed = 600 
-log_dir = "logs/mujoco/Hopper_anneal_corrected_specialBuffer_gammaDiscounted_withoutentropy_"+str(seed)+ "/"
+seed = 500 
+log_dir = "logs/mujoco/Hopper_persistentMDP_check_"+str(seed)+ "/"
 os.makedirs(log_dir, exist_ok=True)
 log_data = {'dt':[],'eval':[],'train':[],'timesteps':[]}
 
@@ -113,7 +113,7 @@ model = SAC(MlpPolicy, env, verbose=1)
 print("Starting Experiment with seed: {}".format(seed))
 
 #model = PPO2(MlpPolicy, env,verbose=True)
-model.learn(total_timesteps=1000000,use_action_repeat= True,poisson=False, callback=callback,only_explore_with_act_rep = False)
+model.learn(total_timesteps=1000000,use_action_repeat= True,poisson=False, callback=callback,only_explore_with_act_rep = True)
 # f.close()
 # json = json.dumps(log_data)
 # f = open(log_dir+"log_data.json","w")

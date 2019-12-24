@@ -17,11 +17,11 @@ import json
 best_mean_reward, n_steps = -np.inf, 0
 best_eval_mean_reward = -np.inf
 seed = 500 
-log_dir = "logs/mujoco/HalfCheetah_fixed_rep_2_new_"+str(seed)+ "/"
+log_dir = "logs/mujoco/HalfCheetah_persistentMDP_"+str(seed)+ "/"
 os.makedirs(log_dir, exist_ok=True)
 log_data = {'dt':[],'eval':[],'train':[],'timesteps':[]}
 
-f = open(log_dir+"eval.txt", "w")
+# f = open(log_dir+"eval.txt", "w")
 set_global_seeds(seed)
 test_env = DummyVecEnv([lambda: gym.make("HalfCheetah-v2")])
 max_eval_timesteps = 5000
@@ -71,7 +71,7 @@ def callback(_locals, _globals):
                     break
         mean_reward=total_reward/100.0
         print("Steps: {} 100 Episode eval: {} Best eval {} ".format(n_steps,mean_reward,best_eval_mean_reward))
-        f.write("Steps: {} 100 Episode eval: {} Best eval {}\n".format(n_steps,mean_reward,best_eval_mean_reward))
+        # f.write("Steps: {} 100 Episode eval: {} Best eval {}\n".format(n_steps,mean_reward,best_eval_mean_reward))
         if mean_reward > best_eval_mean_reward:
             best_eval_mean_reward = mean_reward
             # Example for saving best model
@@ -124,8 +124,8 @@ model = SAC(MlpPolicy, env, verbose=1)
 print("Starting Experiment with seed: {}".format(seed))
 
 #model = PPO2(MlpPolicy, env,verbose=True)
-model.learn(total_timesteps=1000000,use_action_repeat= True,poisson=False, callback=callback)
-f.close()
+model.learn(total_timesteps=1000000,use_action_repeat= True,poisson=False, callback=callback,only_explore_with_act_rep = True)
+# f.close()
 # json = json.dumps(log_data)
 # f = open(log_dir+"log_data.json","w")
 # f.write(json)
