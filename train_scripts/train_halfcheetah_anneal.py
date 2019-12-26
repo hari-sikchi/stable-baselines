@@ -16,14 +16,14 @@ from stable_baselines.results_plotter import load_results, ts2xy
 import json
 best_mean_reward, n_steps = -np.inf, 0
 best_eval_mean_reward = -np.inf
-seed = 500 
-log_dir = "logs/mujoco/HalfCheetah_persistentMDP_"+str(seed)+ "/"
+seed = 800 
+log_dir = "logs/mujoco/Ant_normal_"+str(seed)+ "/"
 os.makedirs(log_dir, exist_ok=True)
 log_data = {'dt':[],'eval':[],'train':[],'timesteps':[]}
 
 # f = open(log_dir+"eval.txt", "w")
 set_global_seeds(seed)
-test_env = DummyVecEnv([lambda: gym.make("HalfCheetah-v2")])
+test_env = DummyVecEnv([lambda: gym.make("Ant-v2")])
 max_eval_timesteps = 5000
 # Automatically normalize the input features
 # test_env = VecNormalize(test_env, norm_obs=True, norm_reward=False,
@@ -109,7 +109,7 @@ def callback(_locals, _globals):
 # env_s= lambda: gym.make("HopperEnvRep-v0")
 # env_s = Monitor(env_s, log_dir, allow_early_resets=True)
 
-env = DummyVecEnv([lambda: gym.make("HalfCheetah-v2")])
+env = DummyVecEnv([lambda: gym.make("Ant-v2")])
 
 # Automatically normalize the input features
 # env = VecNormalize(env, norm_obs=True, norm_reward=False,
@@ -124,7 +124,7 @@ model = SAC(MlpPolicy, env, verbose=1)
 print("Starting Experiment with seed: {}".format(seed))
 
 #model = PPO2(MlpPolicy, env,verbose=True)
-model.learn(total_timesteps=1000000,use_action_repeat= True,poisson=False, callback=callback,only_explore_with_act_rep = True)
+model.learn(total_timesteps=1000000,use_action_repeat= False,poisson=False, callback=callback,only_explore_with_act_rep = False)
 # f.close()
 # json = json.dumps(log_data)
 # f = open(log_dir+"log_data.json","w")
